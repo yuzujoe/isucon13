@@ -5,21 +5,25 @@ package main
 
 import (
 	"fmt"
+	"github.com/newrelic/go-agent/v3/integrations/nrsecurityagent"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/gorilla/sessions"
 	"github.com/jmoiron/sqlx"
+	"github.com/labstack/echo-contrib/session"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-
-	"github.com/gorilla/sessions"
-	"github.com/labstack/echo-contrib/session"
 	echolog "github.com/labstack/gommon/log"
+	"github.com/newrelic/go-agent/v3/integrations/nrecho-v4"
+	_ "github.com/newrelic/go-agent/v3/integrations/nrmysql"
+	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
 const (
@@ -93,7 +97,7 @@ func connectDB(logger echo.Logger) (*sqlx.DB, error) {
 		conf.ParseTime = parseTime
 	}
 
-	db, err := sqlx.Open("mysql", conf.FormatDSN())
+	db, err := sqlx.Open("nrmysql", conf.FormatDSN())
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +131,24 @@ func main() {
 	cookieStore.Options.Domain = "*.u.isucon.dev"
 	e.Use(session.Middleware(cookieStore))
 	// e.Use(middleware.Recover())
+
+	var err error
+	app, err := makeNewRelicApplication()
+	if err != nil {
+		e.Logger.Errorf("failed to create newrelic application: %v", err)
+		os.Exit(1)
+	}
+	err = nrsecurityagent.InitSecurityAgent(
+		app,
+		nrsecurityagent.ConfigSecurityMode("IAST"),
+		nrsecurityagent.ConfigSecurityValidatorServiceEndPointUrl("wss://csec.nr-data.net"),
+		nrsecurityagent.ConfigSecurityEnable(true),
+	)
+	if err != nil {
+		e.Logger.Errorf("faied to init security agent: %v", err)
+	}
+
+	e.Use(nrecho.Middleware(app))
 
 	// 初期化
 	e.POST("/api/initialize", initializeHandler)
@@ -202,7 +224,7 @@ func main() {
 
 	// HTTPサーバ起動
 	listenAddr := net.JoinHostPort("", strconv.Itoa(listenPort))
-	if err := e.Start(listenAddr); err != nil {
+	if err := e.Start(newrelic.WrapListen(listenAddr)); err != nil {
 		e.Logger.Errorf("failed to start HTTP server: %v", err)
 		os.Exit(1)
 	}
@@ -224,4 +246,27 @@ func errorResponseHandler(err error, c echo.Context) {
 	if e := c.JSON(http.StatusInternalServerError, &ErrorResponse{Error: err.Error()}); e != nil {
 		c.Logger().Errorf("%+v", e)
 	}
+}
+
+func makeNewRelicApplication() (*newrelic.Application, error) {
+	app, err := newrelic.NewApplication(
+		newrelic.ConfigAppName(os.Getenv("NEW_RELIC_APP_NAME")),
+		newrelic.ConfigLicense(os.Getenv("NEW_RELIC_LICENSE_KEY")),
+		newrelic.ConfigAppLogEnabled(false),
+		newrelic.ConfigDatastoreRawQuery(true),
+		func(config *newrelic.Config) {
+			config.Labels = map[string]string{
+				"Env": "test",
+			}
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = app.WaitForConnection(5 * time.Second); err != nil {
+		return nil, err
+	}
+
+	return app, nil
 }

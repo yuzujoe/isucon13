@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'newrelic_rpm'
 require 'base64'
 require 'bcrypt'
 require 'digest'

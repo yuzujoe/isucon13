@@ -8,6 +8,7 @@ GEM
     mysql2 (0.5.5)
     mysql2-cs-bind (0.1.1)
       mysql2
+    newrelic_rpm (9.11.0)
     nio4r (2.5.9)
     puma (6.4.0)
       nio4r (~> 2.0)
@@ -35,6 +36,7 @@ DEPENDENCIES
   bcrypt
   mysql2
   mysql2-cs-bind
+  newrelic_rpm
   puma
   sinatra
   sinatra-contrib

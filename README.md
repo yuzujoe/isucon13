@@ -121,7 +121,7 @@ macOSとLinux用のバイナリが作成されます。
 docker compose 環境の場合、次のようにベンチマークを実行します
 
 ```
-$ ./bench_darwin_arm64 run --dns-port=1053 # M1系macOSの場合
+$ ./bin/bench_darwin_arm64 run --dns-port=1053 # M1系macOSの場合
 ```
 
 競技環境に向けては次のように実行します
